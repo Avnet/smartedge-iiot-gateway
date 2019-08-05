@@ -1,0 +1,2 @@
+Use this program to get the last used TPM2_RH_PLATFORM password found in the encrypted file /etc/keys/platform_auth.key
+

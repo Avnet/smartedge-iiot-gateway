@@ -1,0 +1,59 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835", "brcm,bcm2708", "brcm,bcm2709";
+    fragment@0 {
+        target = <&spi2>;
+        __overlay__ {
+            status = "okay";
+        };
+    };
+
+    fragment@1 {
+	target = <&spidev0>;
+	__overlay__ {
+	    status = "disabled";
+	};
+    };
+
+    /* the interrupt pin of the sc16is752-controller */
+    fragment@2 {
+        target = <&gpio>;
+        __overlay__ {
+//            sc16_pins: sc16_pins {
+//                brcm,pins = <30>;
+//                brcm,function = <0>; /* input */
+//            };
+        };
+    };
+    fragment@3 {
+        target-path = "/clocks";
+        __overlay__ {
+            /* external oscillator of mcp2515 on SPI0.0 */
+            uart_osc: uart_osc {
+                compatible = "fixed-clock";
+                #clock-cells = <0>;
+                clock-frequency  = <14745600>;
+            };
+        };
+    };
+    fragment@4 {
+	target = <&spi2>;
+        __overlay__ {
+            #address-cells = <1>;
+	    #size-cells = <0>;
+	    #reg = <0>; /* CE0 */
+	    sc16is752: sc16is752@0 {
+		compatible = "nxp,sc16is740";
+                pinctrl-names = "default";
+                //pintctrl-0 = <&sc16_pins>;
+		reg = <0>; /* CE0 */
+	        interrupt-parent = <&gpio>;
+		interrupts = <30 2>; /* IRQ_TYPE_LEVEL_LOW */
+		spi-max-frequency = <4000000>;
+                clocks = <&uart_osc>;
+                };
+	    };
+	};
+};

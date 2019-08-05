@@ -1,0 +1,135 @@
+/dts-v1/;
+
+/ {
+   videocore {
+      pins_custom { // Customised Pi 3
+         pin_config {
+            pin@default {
+               polarity = "active_high";
+               termination = "pull_down";
+               startup_state = "inactive";
+               function = "input";
+            }; // pin
+            // I2C1
+            pin@p0 { function = "i2c0"; termination = "pull_up"; };
+            pin@p1 { function = "i2c0"; termination = "pull_up"; };
+            pin@p2 { function = "i2c1"; termination = "pull_up"; };
+            pin@p3 { function = "i2c1"; termination = "pull_up"; };
+            pin@p31 { function = "output"; termination = "pull_up";polarity = "active_low"; }; // SPI_CS0
+            
+            // WIFI SD
+            pin@p34 { function = "emmc"; termination = "pull_up"; drive_strength_mA = <8>; };
+            pin@p35 { function = "emmc"; termination = "pull_up"; drive_strength_mA = <8>; };
+            pin@p36 { function = "emmc"; termination = "pull_up"; drive_strength_mA = <8>; };
+            pin@p37 { function = "emmc"; termination = "pull_up"; drive_strength_mA = <8>; };
+            pin@p38 { function = "emmc"; termination = "pull_up"; drive_strength_mA = <8>; };
+            pin@p39 { function = "emmc"; termination = "pull_up"; drive_strength_mA = <8>; };
+            
+            // SPI2
+            pin@p40 { function = "spi2"; termination = "pull_up"; drive_strength_mA = <8>; };
+            pin@p41 { function = "spi2"; termination = "pull_up"; drive_strength_mA = <8>;};
+            pin@p42 { function = "spi2"; termination = "pull_up"; drive_strength_mA = <8>;};
+            //pin@p43 { function = "spi2"; termination = "pull_up"; drive_strength_mA = <8>;};
+            //pin@p44 { function = "spi2"; termination = "pull_up"; drive_strength_mA = <8>;};
+            //pin@p45 { function = "spi2"; termination = "pull_up"; drive_strength_mA = <8>;};
+            pin@p44 { function = "output"; termination = "pull_up"; polarity = "active_low"; };
+            pin@p45 { function = "output"; termination = "pull_up" ;polarity = "active_low";  };
+
+            
+            pin@p14 { function = "uart0";  termination = "no_pulling"; drive_strength_mA = < 8 >; }; // TX uart0
+            pin@p15 { function = "uart0";  termination = "pull_up";    drive_strength_mA = < 8 >; }; // RX uart0
+
+            pin@p46 { function = "input";   termination = "pull_up";    }; // SMPS_SCL
+            pin@p47 { function = "input";   termination = "pull_up";    }; // SMPS_SDA
+            pin@p48 { function = "sdcard"; termination = "pull_up";    drive_strength_mA = < 8 >; }; // SD CLK
+            pin@p49 { function = "sdcard"; termination = "pull_up";    drive_strength_mA = < 8 >; }; // SD CMD
+            pin@p50 { function = "sdcard"; termination = "pull_up";    drive_strength_mA = < 8 >; }; // SD D0
+            pin@p51 { function = "sdcard"; termination = "pull_up";    drive_strength_mA = < 8 >; }; // SD D1
+            pin@p52 { function = "sdcard"; termination = "pull_up";    drive_strength_mA = < 8 >; }; // SD D2
+            pin@p53 { function = "sdcard"; termination = "pull_up";    drive_strength_mA = < 8 >; }; // SD D3
+            pin@p128 { function = "output"; termination = "no_pulling"; }; // BT_ON
+            pin@p129 { function = "output"; termination = "no_pulling"; }; // WL_ON
+            pin@p130 { function = "output"; termination = "no_pulling"; }; // ACT_LED
+            pin@p131 { function = "output"; termination = "no_pulling"; }; // LAN_RUN
+            pin@p132 { function = "input";  termination = "no_pulling"; polarity = "active_low"; }; // Hotplug
+            pin@p133 { function = "output"; termination = "no_pulling"; }; // Camera LED
+            pin@p134 { function = "output"; termination = "no_pulling"; }; // EMMC_ENABLE_N
+            pin@p135 { function = "input";  termination = "no_pulling"; polarity = "active_low"; }; // Power low
+         }; // pin_config
+
+         pin_defines {
+            pin_define@HDMI_CONTROL_ATTACHED {
+               type = "external";
+               number = <4>;
+            };
+            pin_define@EMMC_ENABLE {
+               type = "external";
+               number = <6>;
+            };
+            pin_define@NUM_CAMERAS {
+               type = "internal";
+               number = <0>;
+            };
+            pin_define@POWER_LOW {
+               type = "external";
+               number = <7>;
+            };
+            pin_define@LEDS_DISK_ACTIVITY {
+               type = "external";
+               number = <2>;
+            };
+            pin_define@LAN_RUN {
+               type = "external";
+               number = <3>;
+            };
+            pin_define@BT_ON {
+               type = "external";
+               number = <0>;
+            };
+            pin_define@WL_ON {
+               type = "external";
+               number = <1>;
+            };
+            pin_define@SMPS_SDA {
+               type = "internal";
+               number = <46>;
+            };
+            pin_define@SMPS_SCL {
+               type = "internal";
+               number = <47>;
+            };
+            pin_define@ETH_CLK {
+               type = "absent";
+            };
+            pin_define@WL_LPO_CLK {
+               type = "internal";
+               number = <43>;
+            };
+            pin_define@USB_LIMIT_1A2 {
+               type = "absent";
+            };
+            pin_define@SIO_1V8_SEL {
+               type = "absent";
+            };
+            pin_define@PWML {
+               type = "absent";
+            };
+            pin_define@PWMR {
+               type = "absent";
+            };
+            pin_define@SAFE_MODE {
+               type = "absent";
+            };
+            pin_define@SD_CARD_DETECT {
+               type = "absent";
+            };
+            pin_define@ID_SDA {
+               type = "absent";
+            };
+            pin_define@ID_SCL {
+               type = "absent";
+            };
+         }; // pin_defines
+      }; // pins
+   };
+};

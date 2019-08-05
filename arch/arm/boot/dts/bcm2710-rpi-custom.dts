@@ -1,0 +1,332 @@
+/dts-v1/;
+
+#include "bcm2710.dtsi"
+#include "bcm283x-rpi-smsc9514.dtsi"
+#include "bcm283x-rpi-csi1-2lane.dtsi"
+
+/ {
+	compatible = "raspberrypi,3-model-b", "brcm,bcm2837";
+	model = "Raspberry Pi Custom Rev 1.0";
+
+	chosen {
+		bootargs = "8250.nr_uarts=1";
+	};
+
+	aliases {
+		serial0 = &uart1;
+		serial1 = &uart0;
+	};
+
+	clocks {
+		#address-cells = <0x1>;
+		#size-cells = <0x0>;
+
+		sc16is740_clk: sc16is740_clk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <14745600>;
+		};
+
+		can21_osc: can21_osc {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency  = <16000000>;
+		};
+	};
+};
+
+&gpio {
+	spi0_pins: spi0_pins {
+		brcm,pins = <9 10 11>;
+		brcm,function = <4>; /* alt0 */
+	};
+
+	spi0_cs_pins: spi0_cs_pins {
+		brcm,pins = <8 7>;
+		brcm,function = <1>; /* output */
+	};
+
+	spi2_pins: spi2_pins {
+		brcm,pins = <40 41 42>;
+		brcm,function = <3>; /* alt4 */
+	};
+
+	spi2_cs_pins: spi2_cs_pins {
+		brcm,pins = <31 44 45>;
+		brcm,function = <1>; /* output */
+	};
+
+	i2c0_pins: i2c0 {
+		brcm,pins = <0 1>;
+		brcm,function = <4>;
+	};
+
+	i2c1_pins: i2c1 {
+		brcm,pins = <2 3>;
+		brcm,function = <4>;
+	};
+
+	i2s_pins: i2s {
+		brcm,pins = <18 19 20 21>;
+		brcm,function = <4>; /* alt0 */
+	};
+
+	sdio_pins: sdio_pins {
+		brcm,pins =     <34 35 36 37 38 39>;
+		brcm,function = <7>; // alt3 = SD1
+		brcm,pull =     <0 2 2 2 2 2>;
+	};
+
+	bt_pins: bt_pins {
+		brcm,pins = <43>;
+		brcm,function = <4>; /* alt0:GPCLK2 */
+		brcm,pull = <0>;
+	};
+
+	uart0_pins: uart0_pins {
+		brcm,pins = <32 33>;
+		brcm,function = <7>; /* alt3=UART0 */
+		brcm,pull = <0 2>;
+	};
+
+	uart1_pins: uart1_pins {
+		brcm,pins;
+		brcm,function;
+		brcm,pull;
+	};
+
+	audio_pins: audio_pins {
+		brcm,pins;
+		brcm,function;
+	};
+
+	sc16is740_pins: sc16is740_pins {
+		brcm,pins = <30>;
+		brcm,function = <0>;
+	};
+
+	can21_pins: can21_pins {
+		brcm,pins = <29>;
+		brcm,function = <0>;
+	};
+};
+
+&mmc {
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdio_pins>;
+	non-removable;
+	bus-width = <4>;
+	status = "okay";
+	brcm,overclock-50 = <0>;
+};
+
+&soc {
+	virtgpio: virtgpio {
+		compatible = "brcm,bcm2835-virtgpio";
+		gpio-controller;
+		#gpio-cells = <2>;
+		firmware = <&firmware>;
+		status = "okay";
+	};
+
+	expgpio: expgpio {
+		compatible = "brcm,bcm2835-expgpio";
+		gpio-controller;
+		#gpio-cells = <2>;
+		firmware = <&firmware>;
+		status = "okay";
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins &bt_pins>;
+	status = "okay";
+};
+
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart1_pins>;
+	status = "okay";
+};
+
+&spi0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi0_pins &spi0_cs_pins>;
+	cs-gpios = <&gpio 8 1>, <&gpio 7 1>;
+
+	spidev0: spidev@0{
+		compatible = "spidev";
+		reg = <0>;	/* CE0 */
+		#address-cells = <1>;
+		#size-cells = <0>;
+		spi-max-frequency = <125000000>;
+	};
+
+	spidev1: spidev@1{
+		compatible = "spidev";
+		reg = <1>;	/* CE1 */
+		#address-cells = <1>;
+		#size-cells = <0>;
+		spi-max-frequency = <125000000>;
+	};
+};
+
+&spi2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi2_pins &spi2_cs_pins>;
+	cs-gpios = <&gpio 31 1>, <&gpio 44 1>, <&gpio 45 1>;
+	status = "okay";
+        
+	sc16is740: sc16is740@0 {
+		compatible = "nxp,sc16is740";
+		pinctrl-names = "default";
+		pinctrl-0 = <&sc16is740_pins>;
+		reg = <0>; /* CE0 */
+		interrupt-parent = <&gpio>;
+		/* Note: SC16IS7xx is LEVEL LOW triggered interrupt, but the board is locking up on ISR (driver issue?) */
+//		interrupts = <30 8>; /* IRQ_TYPE_LEVEL_LOW */
+		interrupts = <30 2>; /* IRQ_TYPE_EDGE_FALLING */
+
+		/* 20190212: Below two lines added for RS485 half duplex */
+		/* 20190325: Changed rs485-rts-delay from <0 200>, and added rs485-rts-after-send
+		linux,rs485-enabled-at-boot-time;
+		rs485-rts-after-send;
+		rs485-rts-delay = <0 200>;	/* param1 = delay in ms to assert rts before data, param2 = delay in to hold rts after data */
+		/* This mode will be active by default until disabled with proper ioctrl. */
+
+		spi-max-frequency = <4000000>;
+		status = "okay";
+		clocks = <&sc16is740_clk>;
+	};
+
+	can21: mcp2515@1 {
+		reg = <1>;
+		compatible = "microchip,mcp2515";
+		/* Ensure GPIO expander interrupt is set/reserved */
+		pinctrl-names = "default";
+		pinctrl-0 = <&can21_pins>;
+		spi-max-frequency = <10000000>;
+		interrupt-parent = <&gpio>;
+		interrupt-names = "mcp2515@1-irq";
+		interrupts = <29 8>; /* IRQ_TYPE_LEVEL_LOW */
+		status = "okay";
+		clocks = <&can21_osc>;
+	};
+
+	tpm_tis22: tpm_tis@2 {
+		compatible = "tcg,tpm_tis-spi";
+		reg = <2>;
+		spi-max-frequency = <10000000>;
+/* Connecting TPM to GPIO30 currently causes interrupt storm - lock-up with sc16is7xx */
+/* (shared interrupt).  TPM doesn't need interrupt, so keep it disconnected and disabled. */
+//		interrupt-parent = <&gpio>;
+//		interrupts = <30 8>; /* IRQ_TYPE_LEVEL_LOW */
+		status = "okay";
+	};
+
+/* Need spidev2_2 to (re)program the MCU.  This could be a dtoverlay option. */
+/* Possibly dynamically loaded from command-line? */
+//	spidev2_2: spidev@2{
+//		compatible = "spidev";
+//		reg = <2>;
+//		#address-cells = <1>;
+//		#size-cells = <0>;
+//		spi-max-frequency = <500000>;
+//		status = "okay"
+//	};
+};
+
+&aux {
+	status = "okay";
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+        pinctrl-0 = <&i2c0_pins>;
+	clock-frequency = <100000>;
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins>;
+	clock-frequency = <50000>; /* 20190411: ATtiny I2C gives bus errors at 100kHz, but works well at 50kHz */
+	status="okay";
+        
+	gpio1: gpio1 {
+		gpio-controller;
+		#gpio-cells = <2>;
+		reg = <0x43>;
+		compatible = "fcs,fxl6408";
+		interrupt-controller;
+		interrupt-parent = <&gpio>;
+		ngpios = <8>;
+		gpio-base = <200>;
+		interrupts = <28 0x8>; /* was 28 0x2082 */
+	};
+        
+	gpio2: gpio2 {
+		gpio-controller;
+		#gpio-cells = <2>;
+		reg = <0x44>;
+		compatible = "fcs,fxl6408";
+//		interrupt-controller;
+//		interrupt-parent = <&gpio>;
+		gpio-base = <208>;
+//		interrupts = <28 0x8>;                
+	};
+	attiny: attiny@33 {
+		compatible = "avid,attiny";
+		reg = <0x33>;
+		status = "okay";
+	};
+        
+	pfc8563: rtc@51 {
+		compatible = "nxp,pcf8563";
+		reg = <0x51>;
+	};
+};
+
+&i2c2 {
+	clock-frequency = <100000>;
+};
+
+&i2s {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s_pins>;
+};
+
+&leds {
+	act_led: act {
+		label = "led0";
+		linux,default-trigger = "mmc0";
+		gpios = <&virtgpio 0 0>;
+	};
+
+	pwr_led: pwr {
+		label = "led1";
+		linux,default-trigger = "input";
+		gpios = <&expgpio 7 0>;
+	};
+};
+
+&hdmi {
+	hpd-gpios = <&expgpio 4 GPIO_ACTIVE_LOW>;
+};
+
+&audio {
+	pinctrl-names = "default";
+	pinctrl-0 = <&audio_pins>;
+};
+
+/ {
+	__overrides__ {
+		act_led_gpio = <&act_led>,"gpios:4";
+		act_led_activelow = <&act_led>,"gpios:8";
+		act_led_trigger = <&act_led>,"linux,default-trigger";
+
+		pwr_led_gpio = <&pwr_led>,"gpios:4";
+		pwr_led_activelow = <&pwr_led>,"gpios:8";
+		pwr_led_trigger = <&pwr_led>,"linux,default-trigger";
+	};
+};

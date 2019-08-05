@@ -1,0 +1,13 @@
+Linux kernel
+============
+
+This is the kernel source tree for the IIoTGateway.
+
+We use the cross compiler cross-gcc-8.3.0-pi_2-3 tool chain.  Any other suitable cross compiler for the ARM may be used.
+
+To compile the kernel use the following.
+
+make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf-
+
+The image is found in arch/arm/boot/zImage it should be copied to /boot/zImage on the gateway.
+

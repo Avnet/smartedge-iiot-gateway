@@ -1,0 +1,47 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835", "brcm,bcm2708", "brcm,bcm2709";
+    fragment@0 {
+        target = <&spi2>;
+        __overlay__ {
+            status = "okay";
+        };
+    };
+
+    fragment@1 {
+	target = <&spidev2>;
+	__overlay__ {
+	    status = "disabled";
+	};
+    };
+
+    /* the interrupt pin of the sc16is752-controller */
+    fragment@2 {
+        target = <&gpio>;
+        __overlay__ {
+            //tpm_pins: tpm_pins {
+            //    brcm,pins = <29>;
+            //    brcm,function = <0>; /* input */
+            //};
+        };
+    };
+    
+    fragment@3 {
+	target = <&spi2>;
+        __overlay__ {
+            #address-cells = <1>;
+	    #size-cells = <0>;
+	    tpm: tpm_tis@0 {
+		compatible = "infineon,slb9670";
+                //pinctrl-names = "default";
+                //pinctrl-0 = <&tpm_pins>;
+		reg = <2>; /* CE0 */
+	        //interrupt-parent = <&gpio>;
+		//interrupts = <29 0x2082>; /* IRQ_TYPE_EDGE_FALLING */
+		spi-max-frequency = <10000000>;
+                };
+	    };
+	};
+};
