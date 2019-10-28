@@ -36,6 +36,9 @@ static const char *sterr(int er)
 	return "";
 }
 
+// Workaround issue with I2C clock stretching by retrying failed xfer
+#define ATTINY_IO_RETRIES	(5)
+
 static void attiny_nop(struct attiny_dev *attiny)
 {
 }
@@ -53,15 +56,26 @@ static void attiny_unlock(struct attiny_dev *attiny)
 static int attiny_read(struct attiny_dev *attiny, u8 reg, u8 *data)
 {
 	int ret = 0;
-	
+	unsigned int retries = 0;
+
 #ifdef USE_PLATFORM_DEVICE
 	pr_err("%s: reg %d\n", __func__, reg);
 	return ret;
 #else
-	ret = i2c_smbus_read_byte_data(attiny->client, reg);
-	if (ret < 0) {
-		pr_err("%s: reg %d, ret %d%s\n", __func__, reg, ret, sterr(ret));
-		return ret;
+	do {
+		ret = i2c_smbus_read_byte_data(attiny->client, reg);
+		if (ret >= 0) {
+			break;
+		}
+	} while (++retries <= ATTINY_IO_RETRIES);
+
+	if (retries > 0) {
+		if (ret < 0) {
+			pr_err("%s: reg %d, ret %d%s\n", __func__, reg, ret, sterr(ret));
+			return ret;
+//		} else {
+//			pr_err("%s: succeeded after %d retries\n", __func__, retries);
+		}
 	}
 	*data = (u8) ret;
 	return 0;
@@ -71,19 +85,25 @@ static int attiny_read(struct attiny_dev *attiny, u8 reg, u8 *data)
 static int attiny_write(struct attiny_dev *attiny, u8 reg, u8 data)
 {
 	int ret = 0;
-	int retrys = 3;
+	unsigned int retries = 0;
 #ifdef USE_PLATFORM_DEVICE
 	pr_err("%s: reg %d, data %02X, ret %d\n", __func__, reg, data, ret);
 #else
-	ret = 1;
-	while ((ret != 0) && (retrys !=0))
-	  {
-	    ret = i2c_smbus_write_byte_data(attiny->client, reg, data);
-	    if (ret < 0)
-		pr_err("%s: reg %d, ret %d%s\n", __func__, reg, ret, sterr(ret));
-	    retrys--;
-	    msleep(100);
-	  }
+	do {
+		ret = i2c_smbus_write_byte_data(attiny->client, reg, data);
+		if (ret >= 0) {
+			break;
+		}
+	} while (++retries <= ATTINY_IO_RETRIES);
+
+	if (retries > 0) {
+		if (ret < 0) {
+			pr_err("%s: reg %d, ret %d%s\n", __func__, reg, ret, sterr(ret));
+			return ret;
+//		} else {
+//			pr_err("%s: succeeded after %d retries\n", __func__, retries);
+		}
+	}
 #endif
 	return ret;
 }
@@ -107,7 +127,7 @@ static int attiny_i2c_probe(struct i2c_client *client,
 		return -ENOMEM;
 
 	i2c_set_clientdata(client, attiny);
-	
+
 	attiny->client = client;
 	attiny->read = attiny_read;
 	attiny->write = attiny_write;
@@ -135,7 +155,7 @@ static struct i2c_driver attiny_i2c_driver = {
 		.name = "attiny",
 		.of_match_table = attiny_of_ids,
 	},
-	
+
 };
 
 static int __init attiny_init(void)
@@ -144,7 +164,7 @@ static int __init attiny_init(void)
 	ret = i2c_add_driver(&attiny_i2c_driver);
 	if (ret != 0)
 		pr_err("ATtiny registration failed %d\n", ret);
-	
+
 	return ret;
 }
 
@@ -169,7 +189,7 @@ static int attiny_probe(struct platform_device *pdev)
 	attiny->lock = attiny_nop;
 	attiny->unlock = attiny_nop;
 	//attiny->regmap = devm_regmap_init_i2c(client, &attiny_regmap);
-	
+
 	dev_set_drvdata(&pdev->dev, attiny);
 	return devm_mfd_add_devices(&pdev->dev, PLATFORM_DEVID_AUTO,
 				    attiny_devs, ARRAY_SIZE(attiny_devs),
