@@ -21,7 +21,7 @@
 #define POLL_MS (500)
 
 // Maybe "Access" and "Reset" instead?
-enum { Button, Reset };
+enum { Button, Reset, FactoryReset };
 
 
 // press data.
@@ -37,7 +37,7 @@ struct attiny_btn_drvdata {
 	struct work_struct work;
 	// These two are here instead of in struct btn becuse the
 	// timer handler worker needs access to them.
-	struct press press[2];
+	struct press press[3];
 };
 
 #define work_to_drvdata(x) container_of((x), struct attiny_btn_drvdata, work)
@@ -70,17 +70,25 @@ static void worker_func(struct work_struct *work)
 		sticky |= I2C_STICKY_FACTORY_RST_SHORT | I2C_STICKY_FACTORY_RST_LONG;
 #endif
 
-	if (sticky & I2C_STICKY_FACTORY_RST_SHORT) {
-		drvdata->press[Button].pressed = 1;
-		update |= I2C_STICKY_FACTORY_RST_SHORT;
-		wake_up_interruptible(&drvdata->press[Button].queue);
+	if ( !(sticky & I2C_STICKY_INVALID) ) {
+
+		if (sticky & I2C_STICKY_FACTORY_RST_SHORT) {
+			drvdata->press[Button].pressed = 1;
+			update |= I2C_STICKY_FACTORY_RST_SHORT;
+			wake_up_interruptible(&drvdata->press[Button].queue);
+		}
+		if (sticky & I2C_STICKY_FACTORY_RST_LONG) {
+			drvdata->press[Reset].pressed = 1;
+			update |= I2C_STICKY_FACTORY_RST_LONG;
+			wake_up_interruptible(&drvdata->press[Reset].queue);
+		}
+		if (sticky & I2C_STICKY_FACTORY_RST_VLONG) {
+			drvdata->press[FactoryReset].pressed = 1;
+			update |= I2C_STICKY_FACTORY_RST_VLONG;
+			wake_up_interruptible(&drvdata->press[FactoryReset].queue);
+		}
 	}
-	if (sticky & I2C_STICKY_FACTORY_RST_LONG) {
-		drvdata->press[Reset].pressed = 1;
-		update |= I2C_STICKY_FACTORY_RST_LONG;
-		wake_up_interruptible(&drvdata->press[Reset].queue);
-	}
-	
+
 	if (update)
 		attiny->write(attiny, I2C_STICKY_BITS, update);
 	attiny->unlock(attiny);
@@ -122,7 +130,7 @@ static ssize_t attiny_btn_read(struct file *file, char __user *buf, size_t count
 #else
 	if (copy_to_user(buf, data, sizeof data))
 		return -EFAULT;
-	
+
 	press->pressed = 0;
 	*ppos += sizeof data; // Is this needed if we never seek?
 	return sizeof data;
@@ -135,7 +143,7 @@ static unsigned int attiny_btn_poll(struct file *file, struct poll_table_struct 
 	struct btn *btn = to_btn(me);
 	struct press *press = &btn->drvdata->press[btn->id];
 	unsigned int mask = 0;
-	
+
 	poll_wait(file, &press->queue, pt);
 	if (press->pressed)
 		mask |= POLLIN | POLLRDNORM;
@@ -168,7 +176,7 @@ static int devm_misc_press(struct device *dev, const char *name, int id)
 		return -ENOMEM;
 
 	btn->drvdata = dev_get_drvdata(dev);
-	
+
 	btn->id = id;
 	btn->mdev.minor = MISC_DYNAMIC_MINOR;
 	btn->mdev.fops = &attiny_btn_fops;
@@ -198,7 +206,8 @@ static int attiny_btn_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&drvdata->press[Button].queue);
 	init_waitqueue_head(&drvdata->press[Reset].queue);
-	
+	init_waitqueue_head(&drvdata->press[FactoryReset].queue);
+
 	dev_set_drvdata(&pdev->dev, drvdata);
 
 	ret = devm_misc_press(&pdev->dev, "button", Button);
@@ -206,6 +215,10 @@ static int attiny_btn_probe(struct platform_device *pdev)
 		return ret;
 
 	ret = devm_misc_press(&pdev->dev, "reset", Reset);
+	if (ret)
+		return ret;
+
+	ret = devm_misc_press(&pdev->dev, "factoryreset", FactoryReset);
 	if (ret)
 		return ret;
 

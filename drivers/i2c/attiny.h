@@ -28,6 +28,7 @@
 #define I2C_STICKY_FACTORY_RST_SHORT	(1 << 0)	/* If 1, indicates a short button press detected.  Write 1 to clear. */
 #define I2C_STICKY_PWR_LOW_DETECTED		(1 << 2)	/* If 1, indicates PWR_LOW_N signal asserted (could indicated lack of power or too much 5V draw) */
 #define I2C_STICKY_FACTORY_RST_LONG		(1 << 4)	/* If 1, indicates a long button press detected.  Write 1 to clear. */
+#define I2C_STICKY_FACTORY_RST_VLONG	(1 << 5)	/* If 1, indicates a very long button press detected.  Write 1 to clear. */
 #define I2C_STICKY_RESET_DETECTED		(1 << 6)	/* If 1, indicates RST_N signal released, note that this will happen for WDT reset */
 #define I2C_STICKY_INVALID				(1 << 7)	/* If 1, indicates this register is not valid */
 
