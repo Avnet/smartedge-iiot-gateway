@@ -8,7 +8,7 @@
 #include <uapi/linux/watchdog.h>
 
 #include "attiny.h"
-static int heartbeat;
+static int heartbeat = 60;
 
 // The routine for starting the watchdog device.
 static int attiny_wdt_start(struct watchdog_device *wdd)
@@ -17,7 +17,7 @@ static int attiny_wdt_start(struct watchdog_device *wdd)
 	int ret;
 
 	attiny->lock(attiny);
-	ret = attiny->write(attiny, I2C_WDT_TIME_RST, heartbeat);
+	ret = attiny->write(attiny, I2C_WDT_TIME_RST, 60);
 	if (ret)
 	  dev_err(wdd->parent, "ATTiny Write failed");
 	ret = attiny->write(attiny, I2C_WDT_CMDSTS, WDT_CMD_START);
@@ -37,6 +37,9 @@ static int attiny_wdt_stop(struct watchdog_device *wdd)
 	int ret;
 
 	attiny->lock(attiny);
+	ret = attiny->write(attiny, I2C_WDT_TIME_RST, 60);
+	if (ret)
+	  dev_err(wdd->parent, "ATTiny Write failed");
 	ret = attiny->write(attiny, I2C_WDT_CMDSTS, WDT_CMD_STOP);
 	if (ret)
 	  dev_err(wdd->parent, "ATTiny Write failed");
@@ -86,7 +89,7 @@ static int attiny_wdt_restart(struct watchdog_device *wdd, unsigned long action,
 
 	attiny->lock(attiny);
 	attiny->write(attiny, I2C_WDT_CMDSTS, WDT_CMD_STOP);
-	attiny->write(attiny, I2C_WDT_TIME_RST, 10);
+	attiny->write(attiny, I2C_WDT_TIME_RST, 60);
 	attiny->write(attiny, I2C_WDT_CMDSTS, WDT_CMD_START);
 	attiny->unlock(attiny);
 	return 0;
@@ -147,6 +150,8 @@ static struct watchdog_device attiny_wdt_wdd = {
 	.timeout =	WDOG_TICKS_TO_SECS(PM_WDOG_TIME_SET),
 };
 #endif
+
+
 int attiny_wdt_probe(struct platform_device *pdev)
 {
 	struct attiny_dev *attiny = dev_get_drvdata(pdev->dev.parent);
@@ -165,15 +170,17 @@ int attiny_wdt_probe(struct platform_device *pdev)
 	wdd->parent = &pdev->dev;
 //        wdd->status = WATCHDOG_NOWAYOUT_INIT_STATUS;
 	watchdog_set_drvdata(wdd, attiny);
-	heartbeat = 30;
+	heartbeat = 60;
 	watchdog_init_timeout(wdd, heartbeat,&pdev->dev);
 // can not stop watchdog.
-	watchdog_set_nowayout(wdd, 1);
+	//watchdog_set_nowayout(wdd, 1);
 	err = devm_watchdog_register_device(&pdev->dev, wdd);
 	if (err) {
 	  dev_err(&pdev->dev, "Failed to register watchdog attiny");
 	  return err;
 	}
+
+	attiny_wdt_start(wdd);
         dev_err(&pdev->dev, "Watchdog ID %d", wdd->id);
 	dev_err(&pdev->dev, "Attiny watchdog enabled");
 	return 0;

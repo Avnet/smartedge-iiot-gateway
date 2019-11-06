@@ -20,12 +20,38 @@ static void attiny_led_set(struct led_classdev *cled,
 	attiny->lock(attiny);
 	attiny->read(attiny, I2C_LED_STATE, &led_status);
 	if (value)
-		led_status |= id;
+	  {
+	    led_status |= id;
+	    led_status |= 7;
+	    attiny->write(attiny, I2C_LED_DUTY, 0x7F);
+	  }
 	else
-		led_status &= ~id;
+	  {
+	    led_status &= ~id;
+	    led_status &= ~7;
+	    attiny->write(attiny, I2C_LED_DUTY, 0);
+	  }
 	// Need to deactivate blinking if value == LED_OFF
 	attiny->write(attiny, I2C_LED_STATE, led_status);
-	attiny->write(attiny, I2C_LED_DUTY, 0x7F);
+	attiny->unlock(attiny);
+}
+
+static void attiny_led_smartedge_mode_operation(struct led_classdev *cled,
+			   enum led_brightness value)
+{
+	struct attiny_dev *attiny = dev_get_drvdata(cled->dev->parent);
+	//	u8 id = cled->name[0] == 'r' ? 0x20 : 0x10;
+	//u8 led_status;
+	attiny->lock(attiny);
+	attiny->write(attiny, I2C_LED_STATE,value);
+	if (value == 0)
+	  {
+	    attiny->write(attiny, I2C_LED_DUTY, 0);
+	  }
+	else
+	  {
+	    attiny->write(attiny, I2C_LED_DUTY, 0x7F);
+	  }
 	attiny->unlock(attiny);
 }
 
@@ -44,7 +70,7 @@ static int attiny_led_blink(struct led_classdev *cled,
 			    unsigned long *delay_off)
 {
 	struct attiny_dev *attiny = dev_get_drvdata(cled->dev->parent);
-	
+
 	pr_err("%s: on %ld, off %ld led %s\n", __func__, *delay_on, *delay_off, cled->name);
 	// Rates are Off, 1Hz, 2Hz, 4Hz, 8Hz, and On
 	// So times in ms are 1000, 500, 250, 128
@@ -76,21 +102,36 @@ struct led_classdev attiny_led_green = {
 	.blink_set      = attiny_led_blink,
 };
 
+struct led_classdev attiny_led_smartedge_mode = {
+	.name           = "smartedge_mode",
+	.brightness_set = attiny_led_smartedge_mode_operation,
+	.blink_set      = attiny_led_blink,
+};
+
 static int attiny_led_probe(struct platform_device *pdev)
 {
 	struct attiny_dev *attiny = dev_get_drvdata(pdev->dev.parent);
 	int ret;
-	
+	u8 i;
+
 	ret = led_classdev_register(pdev->dev.parent, &attiny_led_red);
 	if (ret < 0)
 		return ret;
 	ret = led_classdev_register(pdev->dev.parent, &attiny_led_green);
 	if (ret < 0)
 		return ret;
+	ret = led_classdev_register(pdev->dev.parent, &attiny_led_smartedge_mode);
+	if (ret < 0)
+		return ret;
 
 	attiny->lock(attiny);
-	attiny->write(attiny, I2C_LED_STATE, 0x07);  // Solid
-	attiny->write(attiny, I2C_LED_DUTY, 0x7F);   // 50 %
+	//attiny->write(attiny, I2C_LED_STATE, 0);  // Solid
+	//attiny->write(attiny, I2C_LED_DUTY, 0);   // 50 %
+	attiny->write(attiny, I2C_LED_DUTY, 0x7F);
+	attiny->read(attiny, I2C_FW_REV, &i);
+	pr_err("%s: %s %d \n", __func__,"ATTINY FW REV" , i);
+	attiny->read(attiny, I2C_HW_REV, &i);
+	pr_err("%s: %s %d \n", __func__,"ATTINY HW REV" , i);
 	attiny->unlock(attiny);
 	return 0;
 }
@@ -99,7 +140,8 @@ static int attiny_led_remove(struct platform_device *pdev)
 {
 	led_classdev_unregister(&attiny_led_green);
 	led_classdev_unregister(&attiny_led_red);
- 	return 0;
+	led_classdev_unregister(&attiny_led_smartedge_mode);
+	return 0;
 }
 
 static struct platform_driver attiny_led_driver = {
