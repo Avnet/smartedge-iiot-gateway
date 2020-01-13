@@ -36,7 +36,7 @@ static void attiny_led_set(struct led_classdev *cled,
 	attiny->unlock(attiny);
 }
 
-static void attiny_led_smartedge_mode_operation(struct led_classdev *cled,
+static void attiny_led_smartedge_led_operation(struct led_classdev *cled,
 			   enum led_brightness value)
 {
 	struct attiny_dev *attiny = dev_get_drvdata(cled->dev->parent);
@@ -44,14 +44,17 @@ static void attiny_led_smartedge_mode_operation(struct led_classdev *cled,
 	//u8 led_status;
 	attiny->lock(attiny);
 	attiny->write(attiny, I2C_LED_STATE,value);
-	if (value == 0)
-	  {
-	    attiny->write(attiny, I2C_LED_DUTY, 0);
-	  }
-	else
-	  {
-	    attiny->write(attiny, I2C_LED_DUTY, 0x7F);
-	  }
+	attiny->unlock(attiny);
+}
+
+static void attiny_led_smartedge_led_duty_operation(struct led_classdev *cled,
+			   enum led_brightness value)
+{
+	struct attiny_dev *attiny = dev_get_drvdata(cled->dev->parent);
+	//	u8 id = cled->name[0] == 'r' ? 0x20 : 0x10;
+	//u8 led_status;
+	attiny->lock(attiny);
+	attiny->write(attiny, I2C_LED_DUTY,value);
 	attiny->unlock(attiny);
 }
 
@@ -102,9 +105,14 @@ struct led_classdev attiny_led_green = {
 	.blink_set      = attiny_led_blink,
 };
 
-struct led_classdev attiny_led_smartedge_mode = {
-	.name           = "smartedge_mode",
-	.brightness_set = attiny_led_smartedge_mode_operation,
+struct led_classdev attiny_led_smartedge_led = {
+	.name           = "smartedge_led",
+	.brightness_set = attiny_led_smartedge_led_operation,
+	.blink_set      = attiny_led_blink,
+};
+struct led_classdev attiny_led_smartedge_led_duty = {
+	.name           = "smartedge_led_duty",
+	.brightness_set = attiny_led_smartedge_led_duty_operation,
 	.blink_set      = attiny_led_blink,
 };
 
@@ -120,7 +128,10 @@ static int attiny_led_probe(struct platform_device *pdev)
 	ret = led_classdev_register(pdev->dev.parent, &attiny_led_green);
 	if (ret < 0)
 		return ret;
-	ret = led_classdev_register(pdev->dev.parent, &attiny_led_smartedge_mode);
+	ret = led_classdev_register(pdev->dev.parent, &attiny_led_smartedge_led);
+	if (ret < 0)
+		return ret;
+	ret = led_classdev_register(pdev->dev.parent, &attiny_led_smartedge_led_duty);
 	if (ret < 0)
 		return ret;
 
@@ -140,7 +151,8 @@ static int attiny_led_remove(struct platform_device *pdev)
 {
 	led_classdev_unregister(&attiny_led_green);
 	led_classdev_unregister(&attiny_led_red);
-	led_classdev_unregister(&attiny_led_smartedge_mode);
+	led_classdev_unregister(&attiny_led_smartedge_led);
+	led_classdev_unregister(&attiny_led_smartedge_led_duty);
 	return 0;
 }
 

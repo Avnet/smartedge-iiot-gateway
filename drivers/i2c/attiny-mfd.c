@@ -194,6 +194,7 @@ static int attiny_probe(struct platform_device *pdev)
 	return devm_mfd_add_devices(&pdev->dev, PLATFORM_DEVID_AUTO,
 				    attiny_devs, ARRAY_SIZE(attiny_devs),
 				    NULL, 0, NULL);
+
 }
 
 
