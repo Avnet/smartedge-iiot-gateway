@@ -106,21 +106,27 @@ struct bcm2835aux_spi {
 
 static inline u32 bcm2835aux_rd(struct bcm2835aux_spi *bs, unsigned reg)
 {
-	return readl(bs->regs + reg);
+  u32 value;
+  value = readl(bs->regs + reg);
+  //printk(KERN_ERR "R %x  %x",  reg, value);
+  return value;
 }
 
 static inline void bcm2835aux_wr(struct bcm2835aux_spi *bs, unsigned reg,
 				 u32 val)
 {
+  //pr_err( "W %x  %x", reg, val);
 	writel(val, bs->regs + reg);
 }
 
 static inline void bcm2835aux_rd_fifo(struct bcm2835aux_spi *bs)
 {
 	u32 data;
+	int found = 0;
 	int count = min(bs->rx_len, 3);
-
 	data = bcm2835aux_rd(bs, BCM2835_AUX_SPI_IO);
+	if (bs->rx_buf)
+	  memset(bs->rx_buf, 0x55, bs->rx_len);
 	if (bs->rx_buf) {
 		switch (count) {
 		case 4:
@@ -128,15 +134,26 @@ static inline void bcm2835aux_rd_fifo(struct bcm2835aux_spi *bs)
 			/* fallthrough */
 		case 3:
 			*bs->rx_buf++ = (data >> 16) & 0xff;
+			if (((data >> 16) & 0xff) == 0x03)
+			  found++;
 			/* fallthrough */
 		case 2:
 			*bs->rx_buf++ = (data >> 8) & 0xff;
+			if (((data >> 8) & 0xff) == 0x67)
+			  found++;
+			if (((data >> 8) & 0xff) == 0xC7)
+			  found++;
 			/* fallthrough */
 		case 1:
 			*bs->rx_buf++ = (data >> 0) & 0xff;
+			if ((data & 0xff) == 0xeb)
+			  found++;
 			/* fallthrough - no default */
 		}
 	}
+	//if (found == 3) printk("Found3 data %X %X", data, bs);
+	//if (found == 2) printk("Found2 data %X %X", data, bs);
+	//printk("%X %X", data, bs);
 	bs->rx_len -= count;
 	bs->pending -= count;
 }
@@ -178,24 +195,15 @@ static void bcm2835aux_spi_reset_hw(struct bcm2835aux_spi *bs)
 		      BCM2835_AUX_SPI_CNTL0_CLEARFIFO);
 }
 
-static irqreturn_t bcm2835aux_spi_interrupt(int irq, void *dev_id)
+static void bcm2835aux_spi_transfer_helper(struct bcm2835aux_spi *bs)
 {
-	struct spi_master *master = dev_id;
-	struct bcm2835aux_spi *bs = spi_master_get_devdata(master);
-	irqreturn_t ret = IRQ_NONE;
+	u32 stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
 
-	/* IRQ may be shared, so return if our interrupts are disabled */
-	if (!(bcm2835aux_rd(bs, BCM2835_AUX_SPI_CNTL1) &
-	      (BCM2835_AUX_SPI_CNTL1_TXEMPTY | BCM2835_AUX_SPI_CNTL1_IDLE)))
-		return ret;
 
 	/* check if we have data to read */
-	while (bs->rx_len &&
-	       (!(bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT) &
-		  BCM2835_AUX_SPI_STAT_RX_EMPTY))) {
+	for (; bs->rx_len && (stat & BCM2835_AUX_SPI_STAT_RX_LVL);
+	     stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT))
 		bcm2835aux_rd_fifo(bs);
-		ret = IRQ_HANDLED;
-	}
 
 	/* check if we have data to write */
 	while (bs->tx_len &&
@@ -203,16 +211,37 @@ static irqreturn_t bcm2835aux_spi_interrupt(int irq, void *dev_id)
 	       (!(bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT) &
 		  BCM2835_AUX_SPI_STAT_TX_FULL))) {
 		bcm2835aux_wr_fifo(bs);
-		ret = IRQ_HANDLED;
 	}
+#if 0
+	/* check if we have data to read */
+	while(bs->rx_len && (stat & BCM2835_AUX_SPI_STAT_RX_LVL))
+	  {
+	    stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
+	    bcm2835aux_rd_fifo(bs);
+	  }
 
-	/* and check if we have reached "done" */
-	while (bs->rx_len &&
+	/* check if we have data to write */
+	while (bs->tx_len &&
+	       (bs->pending < 12) &&
 	       (!(bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT) &
-		  BCM2835_AUX_SPI_STAT_BUSY))) {
-		bcm2835aux_rd_fifo(bs);
-		ret = IRQ_HANDLED;
+		  BCM2835_AUX_SPI_STAT_TX_FULL))) {
+		bcm2835aux_wr_fifo(bs);
 	}
+#endif
+}
+
+static irqreturn_t bcm2835aux_spi_interrupt(int irq, void *dev_id)
+{
+	struct spi_master *master = dev_id;
+	struct bcm2835aux_spi *bs = spi_master_get_devdata(master);
+	irqreturn_t ret = IRQ_NONE;
+	u32 stat;
+	/* IRQ may be shared, so return if our interrupts are disabled */
+	if (!(bcm2835aux_rd(bs, BCM2835_AUX_SPI_CNTL1) &
+	      (BCM2835_AUX_SPI_CNTL1_TXEMPTY | BCM2835_AUX_SPI_CNTL1_IDLE)))
+		return ret;
+	/* do common fifo handling */
+	bcm2835aux_spi_transfer_helper(bs);
 
 	if (!bs->tx_len) {
 		/* disable tx fifo empty interrupt */
@@ -224,8 +253,23 @@ static irqreturn_t bcm2835aux_spi_interrupt(int irq, void *dev_id)
 	if (!bs->rx_len) {
 		bcm2835aux_wr(bs, BCM2835_AUX_SPI_CNTL1, bs->cntl[1]);
 		complete(&master->xfer_completion);
+		
 	}
-
+	else
+	  {
+	    stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
+	    /* check if we have data to read */
+	    while((stat & BCM2835_AUX_SPI_STAT_RX_LVL))
+	      {
+		stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
+		bcm2835aux_rd_fifo(bs);
+	      }	    
+	  }
+	stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
+	if (stat & (BCM2835_AUX_SPI_STAT_RX_LVL))
+	  printk("More RXLvl %d", stat);
+	if (stat & (BCM2835_AUX_SPI_STAT_RX_FULL))
+	  printk("More RXFull %d", stat);
 	/* and return */
 	return ret;
 }
@@ -284,25 +328,9 @@ static int bcm2835aux_spi_transfer_one_poll(struct spi_master *master,
 
 	/* loop until finished the transfer */
 	while (bs->rx_len) {
-		/* read status */
-		stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
-
-		/* fill in tx fifo with remaining data */
-		if ((bs->tx_len) && (!(stat & BCM2835_AUX_SPI_STAT_TX_FULL))) {
-			bcm2835aux_wr_fifo(bs);
-			continue;
-		}
-
-		/* read data from fifo for both cases */
-		if (!(stat & BCM2835_AUX_SPI_STAT_RX_EMPTY)) {
-			bcm2835aux_rd_fifo(bs);
-			continue;
-		}
-		if (!(stat & BCM2835_AUX_SPI_STAT_BUSY)) {
-			bcm2835aux_rd_fifo(bs);
-			continue;
-		}
-
+		/* do common fifo handling */
+	        //stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
+		bcm2835aux_spi_transfer_helper(bs);
 		/* there is still data pending to read check the timeout */
 		if (bs->rx_len && time_after(jiffies, timeout)) {
 			dev_dbg_ratelimited(&spi->dev,
@@ -373,7 +401,7 @@ static int bcm2835aux_spi_transfer_one(struct spi_master *master,
 
 	/* run in polling mode for short transfers */
 	if (xfer_time_us < BCM2835_AUX_SPI_POLLING_LIMIT_US)
-		return bcm2835aux_spi_transfer_one_poll(master, spi, tfr);
+	    return bcm2835aux_spi_transfer_one_poll(master, spi, tfr);
 
 	/* run in interrupt mode for all others */
 	return bcm2835aux_spi_transfer_one_irq(master, spi, tfr);
