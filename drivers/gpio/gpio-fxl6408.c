@@ -227,7 +227,15 @@ static int fxl6408_gpio_get_value(struct gpio_chip *gc, unsigned off)
 	struct fxl6408_chip *chip = gpiochip_get_data(gc);
 	u8 reg;
 	mutex_lock(&chip->i2c_lock);
-	reg = i2c_smbus_read_byte_data(chip->client, FXL6408_INPUT_STATUS);
+	reg = i2c_smbus_read_byte_data(chip->client, FXL6408_IO_DIR);
+	if ((reg & BIT(off)) == BIT(off))
+	  {
+	    reg = i2c_smbus_read_byte_data(chip->client, FXL6408_OUTPUT);
+	  }
+	else
+	  {
+	    reg = i2c_smbus_read_byte_data(chip->client, FXL6408_INPUT_STATUS);
+	  }
 	mutex_unlock(&chip->i2c_lock);
 	return (reg & BIT(off)) != 0;
 }
