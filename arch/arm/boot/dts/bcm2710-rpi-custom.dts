@@ -217,6 +217,7 @@
 	tpm_tis22: tpm_tis@2 {
 		compatible = "tcg,tpm_tis-spi";
 		reg = <2>;
+		gpio-reset = <&gpio2 3 1>; /* SmartEdge Gateway Specific */
 		spi-max-frequency = <10000000>;
 /* Connecting TPM to GPIO30 currently causes interrupt storm - lock-up with sc16is7xx */
 /* (shared interrupt).  TPM doesn't need interrupt, so keep it disconnected and disabled. */

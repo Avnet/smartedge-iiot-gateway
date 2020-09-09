@@ -23,6 +23,68 @@
 #include <linux/usb/usbnet.h>
 #include <linux/usb/cdc-wdm.h>
 
+#if 1 //Added by Quectel
+#include <linux/etherdevice.h>
+struct sk_buff *qmi_wwan_tx_fixup(struct usbnet *dev, struct sk_buff *skb, gfp_t flags)
+{
+	if (dev->udev->descriptor.idVendor != cpu_to_le16(0x2C7C))
+		return skb;
+	// Skip Ethernet header from message
+	if (skb_pull(skb, ETH_HLEN)) {
+		return skb;
+	} else {
+		dev_err(&dev->intf->dev, "Packet Dropped ");
+	}
+	// Filter the packet out, release it
+	dev_kfree_skb_any(skb);
+	return NULL;
+}
+
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION( 3,9,1 ))
+static int qmi_wwan_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
+{
+	__be16 proto;
+	if (dev->udev->descriptor.idVendor != cpu_to_le16(0x2C7C))
+		return 1;
+	/* This check is no longer done by usbnet */
+	if (skb->len < dev->net->hard_header_len)
+		return 0;
+	switch (skb->data[0] & 0xf0) {
+		case 0x40:
+			proto = htons(ETH_P_IP);
+			break;
+		case 0x60:
+			proto = htons(ETH_P_IPV6);
+			break;
+		case 0x00:
+			if (is_multicast_ether_addr(skb->data))
+			return 1;
+			/* possibly bogus destination - rewrite just in case */
+			skb_reset_mac_header(skb);
+			goto fix_dest;
+		default:
+		/* pass along other packets without modifications */
+			return 1;
+	}
+	if (skb_headroom(skb) < ETH_HLEN)
+		return 0;
+	skb_push(skb, ETH_HLEN);
+	skb_reset_mac_header(skb);
+	eth_hdr(skb)->h_proto = proto;
+	memset(eth_hdr(skb)->h_source, 0, ETH_ALEN);
+fix_dest:
+	memcpy(eth_hdr(skb)->h_dest, dev->net->dev_addr, ETH_ALEN);
+
+	return 1;
+}
+/* very simplistic detection of IPv4 or IPv6 headers */
+static bool possibly_iphdr(const char *data)
+{
+	return (data[0] & 0xd0) == 0x40;
+}
+#endif
+#endif
 /* This driver supports wwan (3G/LTE/?) devices using a vendor
  * specific management protocol called Qualcomm MSM Interface (QMI) -
  * in addition to the more common AT commands over serial interface
@@ -740,6 +802,28 @@ static int qmi_wwan_bind(struct usbnet *dev, struct usb_interface *intf)
 	}
 	dev->net->netdev_ops = &qmi_wwan_netdev_ops;
 	dev->net->sysfs_groups[0] = &qmi_wwan_sysfs_attr_group;
+
+	#if 1 //Added by Quectel
+	if (dev->udev->descriptor.idVendor == cpu_to_le16(0x2C7C)) {
+		dev_info(&intf->dev, "Quectel EC25&EC21&EG91&EG95&EG06&EP06&EM06&BG96&AG35 work on RawIP mode\n");
+		dev->net->flags |= IFF_NOARP;
+		#if (LINUX_VERSION_CODE < KERNEL_VERSION( 3,9,1 ))
+		/* make MAC addr easily distinguishable from an IP header */
+		if (possibly_iphdr(dev->net->dev_addr)) {
+			dev->net->dev_addr[0] |= 0x02; /* set local assignment bit */
+			dev->net->dev_addr[0] &= 0xbf; /* clear "IP" bit */
+		}
+	#endif
+	usb_control_msg(
+		interface_to_usbdev(intf),
+		usb_sndctrlpipe(interface_to_usbdev(intf), 0),
+		0x22, //USB_CDC_REQ_SET_CONTROL_LINE_STATE
+		0x21, //USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE
+		1, //active CDC DTR
+		intf->cur_altsetting->desc.bInterfaceNumber,
+		NULL, 0, 100);
+	}
+	#endif
 err:
 	return status;
 }
@@ -831,6 +915,9 @@ static const struct driver_info	qmi_wwan_info = {
 	.unbind		= qmi_wwan_unbind,
 	.manage_power	= qmi_wwan_manage_power,
 	.rx_fixup       = qmi_wwan_rx_fixup,
+#if 1 //Added by Quectel
+	.tx_fixup = qmi_wwan_tx_fixup,
+#endif
 };
 
 static const struct driver_info	qmi_wwan_info_quirk_dtr = {
@@ -840,6 +927,9 @@ static const struct driver_info	qmi_wwan_info_quirk_dtr = {
 	.unbind		= qmi_wwan_unbind,
 	.manage_power	= qmi_wwan_manage_power,
 	.rx_fixup       = qmi_wwan_rx_fixup,
+#if 1 //Added by Quectel
+	.tx_fixup = qmi_wwan_tx_fixup,
+#endif
 	.data           = QMI_WWAN_QUIRK_DTR,
 };
 
@@ -864,6 +954,12 @@ static const struct driver_info	qmi_wwan_info_quirk_dtr = {
 	QMI_FIXED_INTF(vend, prod, 0)
 
 static const struct usb_device_id products[] = {
+	//{ QMI_FIXED_INTF(0x2C7C, 0x0125, 4) }, /* Quectel EC25 */
+	//{ QMI_FIXED_INTF(0x2C7C, 0x0121, 4) }, /* Quectel EC21 */
+	{ QMI_FIXED_INTF(0x2C7C, 0x0191, 4) }, /* Quectel EG91 */
+	{ QMI_FIXED_INTF(0x2C7C, 0x0195, 4) }, /* Quectel EG95 */
+	{ QMI_FIXED_INTF(0x2C7C, 0x0306, 4) }, /* Quectel EG06/EP06/EM06 */
+	{ QMI_FIXED_INTF(0x2C7C, 0x0435, 4) }, /* Quectel AG35 */
 	/* 1. CDC ECM like devices match on the control interface */
 	{	/* Huawei E392, E398 and possibly others sharing both device id and more... */
 		USB_VENDOR_AND_INTERFACE_INFO(HUAWEI_VENDOR_ID, USB_CLASS_VENDOR_SPEC, 1, 9),
@@ -1205,13 +1301,13 @@ static const struct usb_device_id products[] = {
 	{QMI_FIXED_INTF(0x1199, 0x9061, 8)},	/* Sierra Wireless Modem */
 	{QMI_FIXED_INTF(0x1199, 0x9063, 8)},	/* Sierra Wireless EM7305 */
 	{QMI_FIXED_INTF(0x1199, 0x9063, 10)},	/* Sierra Wireless EM7305 */
-	{QMI_QUIRK_SET_DTR(0x1199, 0x9071, 8)},	/* Sierra Wireless MC74xx */
-	{QMI_QUIRK_SET_DTR(0x1199, 0x9071, 10)},/* Sierra Wireless MC74xx */
-	{QMI_QUIRK_SET_DTR(0x1199, 0x9079, 8)},	/* Sierra Wireless EM74xx */
-	{QMI_QUIRK_SET_DTR(0x1199, 0x9079, 10)},/* Sierra Wireless EM74xx */
-	{QMI_QUIRK_SET_DTR(0x1199, 0x907b, 8)},	/* Sierra Wireless EM74xx */
-	{QMI_QUIRK_SET_DTR(0x1199, 0x907b, 10)},/* Sierra Wireless EM74xx */
-	{QMI_QUIRK_SET_DTR(0x1199, 0x9091, 8)},	/* Sierra Wireless EM7565 */
+	{QMI_FIXED_INTF(0x1199, 0x9071, 8)},	/* Sierra Wireless MC74xx */
+	{QMI_FIXED_INTF(0x1199, 0x9071, 10)},	/* Sierra Wireless MC74xx */
+	{QMI_FIXED_INTF(0x1199, 0x9079, 8)},	/* Sierra Wireless EM74xx */
+	{QMI_FIXED_INTF(0x1199, 0x9079, 10)},	/* Sierra Wireless EM74xx */
+	{QMI_FIXED_INTF(0x1199, 0x907b, 8)},	/* Sierra Wireless EM74xx */
+	{QMI_FIXED_INTF(0x1199, 0x907b, 10)},	/* Sierra Wireless EM74xx */
+	{QMI_FIXED_INTF(0x1199, 0x9091, 8)},	/* Sierra Wireless EM7565 */
 	{QMI_FIXED_INTF(0x1bbb, 0x011e, 4)},	/* Telekom Speedstick LTE II (Alcatel One Touch L100V LTE) */
 	{QMI_FIXED_INTF(0x1bbb, 0x0203, 2)},	/* Alcatel L800MA */
 	{QMI_FIXED_INTF(0x2357, 0x0201, 4)},	/* TP-LINK HSUPA Modem MA180 */
@@ -1250,7 +1346,7 @@ static const struct usb_device_id products[] = {
 	{QMI_FIXED_INTF(0x03f0, 0x4e1d, 8)},	/* HP lt4111 LTE/EV-DO/HSPA+ Gobi 4G Module */
 	{QMI_FIXED_INTF(0x03f0, 0x9d1d, 1)},	/* HP lt4120 Snapdragon X5 LTE */
 	{QMI_FIXED_INTF(0x22de, 0x9061, 3)},	/* WeTelecom WPD-600N */
-	{QMI_QUIRK_SET_DTR(0x1e0e, 0x9001, 5)},	/* SIMCom 7100E, 7230E, 7600E ++ */
+	{QMI_FIXED_INTF(0x1e0e, 0x9001, 5)},	/* SIMCom 7230E */
 	{QMI_QUIRK_SET_DTR(0x2c7c, 0x0125, 4)},	/* Quectel EC25, EC20 R2.0  Mini PCIe */
 	{QMI_QUIRK_SET_DTR(0x2c7c, 0x0121, 4)},	/* Quectel EC21 Mini PCIe */
 	{QMI_QUIRK_SET_DTR(0x2c7c, 0x0191, 4)},	/* Quectel EG91 */
@@ -1285,7 +1381,9 @@ static const struct usb_device_id products[] = {
 	{QMI_GOBI_DEVICE(0x05c6, 0x9225)},	/* Sony Gobi 2000 Modem device (N0279, VU730) */
 	{QMI_GOBI_DEVICE(0x05c6, 0x9245)},	/* Samsung Gobi 2000 Modem device (VL176) */
 	{QMI_GOBI_DEVICE(0x03f0, 0x251d)},	/* HP Gobi 2000 Modem device (VP412) */
+#if 0 //Add by Quectel
 	{QMI_GOBI_DEVICE(0x05c6, 0x9215)},	/* Acer Gobi 2000 Modem device (VP413) */
+#endif
 	{QMI_FIXED_INTF(0x05c6, 0x9215, 4)},	/* Quectel EC20 Mini PCIe */
 	{QMI_GOBI_DEVICE(0x05c6, 0x9265)},	/* Asus Gobi 2000 Modem device (VR305) */
 	{QMI_GOBI_DEVICE(0x05c6, 0x9235)},	/* Top Global Gobi 2000 Modem device (VR306) */
