@@ -1,0 +1,7 @@
+To fix tpm_device_provision
+
+1) download azure-iot-sdk-c to gateway. On gateway run "git clone https://github.com/Azure/azure-iot-sdk-c.git".
+2) copy tpm_device_provision.c into azure-iot-sdk-c/provisioning_client/tools/tpm_device_provision/
+3) copy build_device_provision.sh into azure-iot-skd-c directory and run from that directory "./build_device_provisioning.sh" .
+4) copy azure-iot-sdk-c/bld/provisioning_client/tools/tpm_device_provision/tpm_device_provision /opt/avnet-iot/iotservices for version 1.1 gateway software and above.  For version 1.0 copy same to /bin/
+
