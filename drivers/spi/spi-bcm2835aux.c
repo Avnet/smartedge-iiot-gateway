@@ -125,35 +125,19 @@ static inline void bcm2835aux_rd_fifo(struct bcm2835aux_spi *bs)
 	int found = 0;
 	int count = min(bs->rx_len, 3);
 	data = bcm2835aux_rd(bs, BCM2835_AUX_SPI_IO);
-	if (bs->rx_buf)
-	  memset(bs->rx_buf, 0x55, bs->rx_len);
 	if (bs->rx_buf) {
 		switch (count) {
-		case 4:
-			*bs->rx_buf++ = (data >> 24) & 0xff;
-			/* fallthrough */
 		case 3:
 			*bs->rx_buf++ = (data >> 16) & 0xff;
-			if (((data >> 16) & 0xff) == 0x03)
-			  found++;
 			/* fallthrough */
 		case 2:
 			*bs->rx_buf++ = (data >> 8) & 0xff;
-			if (((data >> 8) & 0xff) == 0x67)
-			  found++;
-			if (((data >> 8) & 0xff) == 0xC7)
-			  found++;
 			/* fallthrough */
 		case 1:
 			*bs->rx_buf++ = (data >> 0) & 0xff;
-			if ((data & 0xff) == 0xeb)
-			  found++;
 			/* fallthrough - no default */
 		}
 	}
-	//if (found == 3) printk("Found3 data %X %X", data, bs);
-	//if (found == 2) printk("Found2 data %X %X", data, bs);
-	//printk("%X %X", data, bs);
 	bs->rx_len -= count;
 	bs->pending -= count;
 }
@@ -255,6 +239,7 @@ static irqreturn_t bcm2835aux_spi_interrupt(int irq, void *dev_id)
 		complete(&master->xfer_completion);
 		
 	}
+	#if 0
 	else
 	  {
 	    stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
@@ -265,12 +250,7 @@ static irqreturn_t bcm2835aux_spi_interrupt(int irq, void *dev_id)
 		bcm2835aux_rd_fifo(bs);
 	      }	    
 	  }
-	stat = bcm2835aux_rd(bs, BCM2835_AUX_SPI_STAT);
-	if (stat & (BCM2835_AUX_SPI_STAT_RX_LVL))
-	  printk("More RXLvl %d", stat);
-	if (stat & (BCM2835_AUX_SPI_STAT_RX_FULL))
-	  printk("More RXFull %d", stat);
-	/* and return */
+	#endif
 	return ret;
 }
 
